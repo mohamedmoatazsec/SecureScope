@@ -14,13 +14,24 @@ def scan_headers(url):
     try:
         response = requests.get(url, timeout=10)
 
-        results = {}
+        headers_result = {}
 
         for header in SECURITY_HEADERS:
-            results[header] = header in response.headers
+            headers_result[header] = header in response.headers
 
-        return results
+        cookies = []
+
+        for cookie in response.cookies:
+            cookies.append(
+                {
+                    "name": cookie.name,
+                    "secure": cookie.secure,
+                    "httponly": "HttpOnly" in str(cookie),
+                }
+            )
+
+        return headers_result, cookies
 
     except requests.RequestException as e:
         print(f"Error: {e}")
-        return None
+        return None, []

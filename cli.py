@@ -32,7 +32,7 @@ def main():
 
     console.print(f"\n[bold yellow]Scanning:[/bold yellow] {url}\n")
 
-    results = scan_headers(url)
+    results, cookies = scan_headers(url)
 
     if results is None:
         return
@@ -52,6 +52,26 @@ def main():
             table.add_row(header, "[red]FAIL[/red]")
 
     console.print(table)
+
+    # ---------------- Cookies ----------------
+
+    if cookies:
+        cookie_table = Table(title="Cookies")
+
+        cookie_table.add_column("Cookie", style="cyan")
+        cookie_table.add_column("Secure", justify="center")
+        cookie_table.add_column("HttpOnly", justify="center")
+
+        for cookie in cookies:
+            cookie_table.add_row(
+                cookie["name"],
+                "[green]PASS[/green]" if cookie["secure"] else "[red]FAIL[/red]",
+                "[green]PASS[/green]" if cookie["httponly"] else "[red]FAIL[/red]",
+            )
+
+        console.print(cookie_table)
+
+    # -----------------------------------------
 
     percent = int(score / len(results) * 100)
 
