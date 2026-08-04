@@ -39,6 +39,13 @@ pip install -r requirements.txt
 ```
 
 ---
+## Requirements
+
+- Python 3.9+
+- requests
+- rich
+- colorama
+- python-whois
 
 ## Usage
 
@@ -65,8 +72,6 @@ python cli.py https://github.com --csv
 ```
 
 ---
-
-## Example Output
 
 ## Demo
 
@@ -102,6 +107,15 @@ SecureScope/
 
 ---
 
+## Built With
+
+- Python
+- Rich
+- Requests
+- Socket
+- SSL
+- GitHub Actions
+
 ## Roadmap
 
 - [x] HTTP Security Headers
@@ -125,6 +139,20 @@ SecureScope/
 
 ---
 
+## Contributing
+
+Contributions are welcome.
+
+1. Fork the repository
+2. Create your feature branch
+3. Commit your changes
+4. Push your branch
+5. Open a Pull Request
+
+
 ## License
 
 This project is licensed under the MIT License.
+
+
+⭐ If you like this project, consider giving it a star on GitHub.
