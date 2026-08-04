@@ -1,56 +1,136 @@
 # SecureScope
 
-AI-powered Web Security Assessment Toolkit.
+![Python](https://img.shields.io/badge/Python-3.9+-blue.svg)
+![License](https://img.shields.io/badge/License-MIT-green.svg)
+![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/mohamedmoatazsec/SecureScope/python.yml?branch=main)
+![GitHub last commit](https://img.shields.io/github/last-commit/mohamedmoatazsec/SecureScope)
+
+AI-powered Web Security Assessment Toolkit for analyzing the security posture of web applications.
+
+---
 
 ## Features
 
-- HTTP Security Headers Scanner
-- Security Score Calculation
-- Fast CLI Interface
-- HTTPS Support
+- HTTP Security Headers Analysis
+- Cookie Security Checks
+- TLS Certificate Inspection
+- DNS Lookup
+- Common Port Scanner
+- Subdomain Discovery
+- Technology Detection
+- robots.txt Analysis
+- security.txt Analysis
+- WHOIS Lookup
+- HTTP Methods Detection
+- CORS Analysis
+- Security Recommendations
+- HTML Report Export
+- JSON Report Export
+- CSV Report Export
+
+---
 
 ## Installation
 
 ```bash
 git clone https://github.com/mohamedmoatazsec/SecureScope.git
 cd SecureScope
-py -m pip install -r requirements.txt
+pip install -r requirements.txt
 ```
+
+---
 
 ## Usage
 
 ```bash
-py cli.py https://github.com
+python cli.py https://github.com
 ```
 
-Example Output
+Generate HTML report:
 
+```bash
+python cli.py https://github.com --html
 ```
-==================================================
-SecureScope v1.0
-==================================================
 
+Generate JSON report:
+
+```bash
+python cli.py https://github.com --json
+```
+
+Generate CSV report:
+
+```bash
+python cli.py https://github.com --csv
+```
+
+---
+
+## Example Output
+
+```text
 Scanning: https://github.com
 
-[+] Content-Security-Policy
-[+] Strict-Transport-Security
-[+] X-Frame-Options
-[+] X-Content-Type-Options
-[+] Referrer-Policy
-[-] Permissions-Policy
-
 Security Score: 83%
+
+✓ HTTP Security Headers
+✓ TLS Certificate
+✓ DNS Lookup
+✓ Port Scan
+✓ Subdomain Enumeration
+✓ Technology Detection
+✓ robots.txt
+✓ security.txt
+✓ WHOIS
+✓ HTTP Methods
+✓ CORS Analysis
+
+Recommendations:
+- Missing Permissions-Policy
+- Certificate Near Expiration
 ```
+
+---
+
+## Project Structure
+
+```
+SecureScope/
+│
+├── securescope/
+├── tests/
+├── .github/workflows/
+├── cli.py
+├── requirements.txt
+├── README.md
+└── LICENSE
+```
+
+---
 
 ## Roadmap
 
-- Cookie Scanner
-- TLS Scanner
-- robots.txt Analyzer
-- HTML Report
-- JSON Report
-- GitHub Actions
+- [x] HTTP Security Headers
+- [x] TLS Scanner
+- [x] DNS Lookup
+- [x] Port Scanner
+- [x] Subdomain Scanner
+- [x] Technology Detection
+- [x] robots.txt Scanner
+- [x] security.txt Scanner
+- [x] WHOIS Lookup
+- [x] HTTP Methods Detection
+- [x] CORS Analysis
+- [x] Security Recommendations
+- [x] HTML / JSON / CSV Reports
+- [ ] WAF Detection
+- [ ] CVE Detection
+- [ ] SSL Rating
+- [ ] GeoIP Lookup
+- [ ] AI Risk Scoring
+
+---
 
 ## License
 
-MIT
+This project is licensed under the MIT License.
