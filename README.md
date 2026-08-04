@@ -4,7 +4,6 @@
 ![License](https://img.shields.io/badge/License-MIT-green.svg)
 ![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/mohamedmoatazsec/SecureScope/python.yml?branch=main)
 ![GitHub last commit](https://img.shields.io/github/last-commit/mohamedmoatazsec/SecureScope)
-![GitHub stars](https://img.shields.io/github/stars/mohamedmoatazsec/SecureScope?style=social)
 
 AI-powered Web Security Assessment Toolkit for analyzing the security posture of web applications.
 
@@ -166,5 +165,4 @@ This project is licensed under the MIT License.
 
 ## Support
 
-
-⭐ If you like this project, consider giving it a star on GitHub.
+If you find this project useful, please consider giving it a ⭐ on GitHub.
