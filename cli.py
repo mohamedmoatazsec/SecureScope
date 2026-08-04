@@ -4,6 +4,7 @@ from rich.table import Table
 from rich.panel import Panel
 
 from securescope.headers import scan_headers
+from securescope.tls import scan_tls
 
 console = Console()
 
@@ -36,6 +37,8 @@ def main():
 
     if results is None:
         return
+
+    # ---------------- Headers ----------------
 
     table = Table(title="HTTP Security Headers")
 
@@ -71,7 +74,26 @@ def main():
 
         console.print(cookie_table)
 
-    # -----------------------------------------
+    # ---------------- TLS ----------------
+
+    tls = scan_tls(url)
+
+    if "error" not in tls:
+
+        tls_table = Table(title="TLS Certificate")
+
+        tls_table.add_column("Property", style="cyan")
+        tls_table.add_column("Value")
+
+        tls_table.add_row("Protocol", tls["protocol"])
+        tls_table.add_row("Issuer", tls["issuer"])
+        tls_table.add_row("Subject", tls["subject"])
+        tls_table.add_row("Expires", tls["expires"])
+        tls_table.add_row("Days Remaining", str(tls["days"]))
+
+        console.print(tls_table)
+
+    # ---------------- Score ----------------
 
     percent = int(score / len(results) * 100)
 
