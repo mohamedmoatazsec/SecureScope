@@ -68,6 +68,22 @@ python cli.py https://github.com --csv
 
 ## Example Output
 
+## Demo
+
+<p align="center">
+  <img src="assets/demo.png" width="100%">
+</p>
+
+### More Output
+
+<p align="center">
+  <img src="assets/demo2.png" width="100%">
+</p>
+
+<p align="center">
+  <img src="assets/demo3.png" width="100%">
+</p>
+
 ```text
 Scanning: https://github.com
 
