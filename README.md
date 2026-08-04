@@ -84,28 +84,6 @@ python cli.py https://github.com --csv
   <img src="assets/demo3.png" width="100%">
 </p>
 
-```text
-Scanning: https://github.com
-
-Security Score: 83%
-
-✓ HTTP Security Headers
-✓ TLS Certificate
-✓ DNS Lookup
-✓ Port Scan
-✓ Subdomain Enumeration
-✓ Technology Detection
-✓ robots.txt
-✓ security.txt
-✓ WHOIS
-✓ HTTP Methods
-✓ CORS Analysis
-
-Recommendations:
-- Missing Permissions-Policy
-- Certificate Near Expiration
-```
-
 ---
 
 ## Project Structure
