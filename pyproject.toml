@@ -4,15 +4,15 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "securescope"
-version = "1.1.0"
-description = "Web security posture assessment toolkit: headers, cookies, TLS, CORS, HTTP methods, recon, with HTML/JSON/CSV reports."
+version = "2.0.0"
+description = "Web security posture scanner with evidence-backed findings, grades, and SARIF/JSON/HTML/Markdown reports for CI."
 readme = "README.md"
 requires-python = ">=3.9"
 license = { file = "LICENSE" }
 authors = [{ name = "Mohamed Moataz" }]
-keywords = ["security", "web-security", "penetration-testing", "recon", "security-headers", "cors", "owasp"]
+keywords = ["security", "web-security", "appsec", "security-headers", "csp", "cors", "tls", "sarif", "ci", "owasp"]
 classifiers = [
-    "Development Status :: 4 - Beta",
+    "Development Status :: 5 - Production/Stable",
     "Environment :: Console",
     "Intended Audience :: Information Technology",
     "License :: OSI Approved :: MIT License",
@@ -24,14 +24,15 @@ classifiers = [
 dependencies = [
     "requests>=2.28",
     "rich>=13",
-    "python-whois>=0.9",
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=7", "ruff>=0.4"]
+whois = ["python-whois>=0.9"]
+dev = ["pytest>=7", "ruff>=0.4", "python-whois>=0.9"]
 
 [project.urls]
 Homepage = "https://github.com/mohamedmoatazsec/SecureScope"
+Changelog = "https://github.com/mohamedmoatazsec/SecureScope/blob/main/CHANGELOG.md"
 Issues = "https://github.com/mohamedmoatazsec/SecureScope/issues"
 
 [project.scripts]
@@ -42,7 +43,8 @@ include = ["securescope*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-q"
+addopts = "-q -p no:cacheprovider"
+filterwarnings = ["ignore::DeprecationWarning:securescope.checks.tls"]
 
 [tool.ruff]
 line-length = 110

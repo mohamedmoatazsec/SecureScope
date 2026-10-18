@@ -2,7 +2,7 @@
 
 import socket
 
-from securescope.tls import hostname_from_url
+from securescope.config import hostname_from_url
 
 
 def scan_dns(url):

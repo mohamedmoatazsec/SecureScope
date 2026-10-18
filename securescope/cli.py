@@ -1,283 +1,397 @@
-"""Command-line interface for SecureScope."""
+"""Command-line interface.
+
+Exit codes:
+  0  scan completed, no finding at or above --fail-on (or no threshold set)
+  1  usage error, or no target could be scanned
+  2  at least one finding at or above the --fail-on severity (new findings only when --baseline is given)
+"""
+
+from __future__ import annotations
 
 import argparse
-import os
 import sys
+from pathlib import Path
 
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
+from rich.text import Text
 
 from securescope import __version__
-from securescope.report_csv import generate_csv_report
-from securescope.report_html import generate_html_report
-from securescope.report_json import generate_json_report
-from securescope.scanner import normalize_url, scan
+from securescope.checks import ALL_CHECKS, CHECK_IDS
+from securescope.config import ScanConfig, normalize_url, parse_header_option
+from securescope.diff import diff_findings, load_baseline, new_findings
+from securescope.findings import CheckResult, Finding, Severity, meets_threshold
+from securescope.reports import FORMATS, render, write
+from securescope.scanner import Report, ScanResult, scan_targets
 
-console = Console()
+SEVERITY_STYLE = {
+    Severity.CRITICAL: "bold white on red",
+    Severity.HIGH: "bold red",
+    Severity.MEDIUM: "yellow",
+    Severity.LOW: "cyan",
+    Severity.INFO: "dim",
+}
 
-PASS = "[green]PASS[/green]"
-FAIL = "[red]FAIL[/red]"
+GRADE_STYLE = {
+    "A+": "bold green",
+    "A": "bold green",
+    "B": "green",
+    "C": "yellow",
+    "D": "red",
+    "F": "bold red",
+}
 
 
-def banner():
-    console.print(
-        Panel.fit(
-            f"[bold cyan]SecureScope[/bold cyan] [dim]v{__version__}[/dim]\n"
-            "[green]Web security posture assessment toolkit[/green]",
-            border_style="cyan",
-        )
-    )
-
-
-def parse_arguments(argv=None):
+def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="securescope",
-        description="Assess the security posture of a web application you are authorised to test.",
+        description=(
+            "Web security posture scanner: headers, CSP, cookies, TLS, CORS, HTTP methods and recon, "
+            "with evidence-backed findings, a grade, and reports for humans and CI."
+        ),
+        epilog=(
+            "examples:\n"
+            "  securescope example.com\n"
+            "  securescope https://app.example.com -f html -f json -o reports/\n"
+            "  securescope -t targets.txt --fail-on high -f sarif\n"
+            "  securescope https://app.example.com --proxy http://127.0.0.1:8080 \\\n"
+            "      -H 'Authorization: Bearer …'\n"
+            "  securescope https://app.example.com --baseline reports/last-good.json --fail-on medium\n\n"
+            "Only scan systems you own or are explicitly authorised to test."
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    parser.add_argument("url", help="Target URL or hostname (https:// is assumed if omitted)")
-    parser.add_argument("--html", action="store_true", help="write an HTML report")
-    parser.add_argument("--json", action="store_true", help="write a JSON report")
-    parser.add_argument("--csv", action="store_true", help="write a CSV report")
+    parser.add_argument("targets", nargs="*", metavar="TARGET", help="URL or hostname (https:// assumed)")
     parser.add_argument(
-        "-o",
-        "--output",
-        default=".",
-        metavar="DIR",
-        help="directory for report files (default: current directory)",
+        "-t", "--targets-file", metavar="FILE", help="file with one target per line (# comments allowed)"
     )
-    parser.add_argument("--skip-ports", action="store_true", help="skip the TCP port scan")
-    parser.add_argument("--skip-subdomains", action="store_true", help="skip subdomain discovery")
+
+    out = parser.add_argument_group("output")
+    out.add_argument(
+        "-f",
+        "--format",
+        action="append",
+        choices=FORMATS,
+        metavar="FMT",
+        help=f"write a report file; repeatable. One of: {', '.join(FORMATS)}",
+    )
+    out.add_argument(
+        "-o", "--output", default=".", metavar="DIR", help="directory for report files (default: .)"
+    )
+    out.add_argument(
+        "-n",
+        "--name",
+        default="securescope-report",
+        metavar="NAME",
+        help="report file name without extension",
+    )
+    out.add_argument(
+        "--stdout",
+        choices=FORMATS,
+        metavar="FMT",
+        help="print one report format to stdout (console output goes to stderr)",
+    )
+    out.add_argument(
+        "-q",
+        "--quiet",
+        action="store_true",
+        help="one summary line per target instead of the full console report",
+    )
+    out.add_argument("--no-color", action="store_true", help="plain console output")
+    out.add_argument(
+        "--show-info", action="store_true", help="include informational findings in the console report"
+    )
+
+    gate = parser.add_argument_group("CI gate")
+    gate.add_argument(
+        "--fail-on",
+        metavar="SEV",
+        help="exit 2 if any finding is at least this severity (critical, high, medium, low)",
+    )
+    gate.add_argument(
+        "--baseline",
+        metavar="JSON",
+        help="previous JSON report; --fail-on then only counts findings that are new",
+    )
+
+    checks = parser.add_argument_group("checks")
+    checks.add_argument("--checks", metavar="LIST", help="comma-separated check ids to run (default: all)")
+    checks.add_argument("--skip-checks", metavar="LIST", help="comma-separated check ids to skip")
+    checks.add_argument("--list-checks", action="store_true", help="list check ids and exit")
+    checks.add_argument("--ports", action="store_true", help="probe common TCP ports (opt-in)")
+    checks.add_argument("--subdomains", action="store_true", help="resolve common subdomains (opt-in)")
+    checks.add_argument("--whois", action="store_true", help="WHOIS lookup (opt-in)")
+
+    net = parser.add_argument_group("connection")
+    net.add_argument(
+        "--proxy",
+        metavar="URL",
+        help="HTTP(S) proxy for all HTTP requests, e.g. http://127.0.0.1:8080 (Burp)",
+    )
+    net.add_argument(
+        "-H",
+        "--header",
+        action="append",
+        default=[],
+        metavar="'Name: value'",
+        help="extra request header; repeatable",
+    )
+    net.add_argument(
+        "--cookie", action="append", default=[], metavar="name=value", help="cookie to send; repeatable"
+    )
+    net.add_argument("--user-agent", metavar="UA", help="override the User-Agent")
+    net.add_argument(
+        "--insecure", action="store_true", help="do not verify TLS certificates for HTTP requests"
+    )
+    net.add_argument(
+        "--timeout", type=float, default=10.0, metavar="SEC", help="per-request timeout (default: 10)"
+    )
+    net.add_argument(
+        "--retries", type=int, default=1, metavar="N", help="retries on 502/503/504 (default: 1)"
+    )
+    net.add_argument(
+        "--concurrency", type=int, default=4, metavar="N", help="targets scanned in parallel (default: 4)"
+    )
+
     parser.add_argument("--version", action="version", version=f"SecureScope {__version__}")
-    return parser.parse_args(argv)
+    return parser
 
 
-def show_headers(headers, error=None):
-    table = Table(title="HTTP Security Headers")
-    table.add_column("Header", style="cyan")
-    table.add_column("Status", justify="center")
-
-    if not headers:
-        console.print(f"[red]Could not fetch the target:[/red] {error or 'no response'}")
-        return
-
-    score = 0
-    for header, present in headers.items():
-        table.add_row(header, PASS if present else FAIL)
-        score += int(bool(present))
-
-    console.print(table)
-
-    percent = int(score / len(headers) * 100)
-    color = "green" if percent >= 80 else "yellow" if percent >= 60 else "red"
-    console.print(f"\nHeader score: [{color}]{percent}%[/{color}]")
+def read_targets_file(path: str) -> list[str]:
+    lines = Path(path).read_text(encoding="utf-8").splitlines()
+    return [line.strip() for line in lines if line.strip() and not line.strip().startswith("#")]
 
 
-def show_cookies(cookies):
-    if not cookies:
-        return
-    table = Table(title="Cookies")
-    table.add_column("Cookie", style="cyan")
-    table.add_column("Secure", justify="center")
-    table.add_column("HttpOnly", justify="center")
-    table.add_column("SameSite", justify="center")
-    for cookie in cookies:
-        table.add_row(
-            cookie["name"],
-            PASS if cookie["secure"] else FAIL,
-            PASS if cookie["httponly"] else FAIL,
-            cookie.get("samesite") or "[red]-[/red]",
+def config_from_args(args: argparse.Namespace) -> ScanConfig:
+    headers = dict(parse_header_option(h) for h in args.header)
+    cookies = {}
+    for raw in args.cookie:
+        if "=" not in raw:
+            raise ValueError(f"cookie {raw!r} must look like name=value")
+        name, _, value = raw.partition("=")
+        cookies[name.strip()] = value.strip()
+
+    def split(value: str | None) -> list[str] | None:
+        if value is None:
+            return None
+        ids = [v.strip() for v in value.split(",") if v.strip()]
+        unknown = [i for i in ids if i not in CHECK_IDS]
+        if unknown:
+            raise ValueError(f"unknown check id(s): {', '.join(unknown)} (see --list-checks)")
+        return ids
+
+    return ScanConfig(
+        timeout=args.timeout,
+        retries=args.retries,
+        proxy=args.proxy,
+        headers=headers,
+        cookies=cookies,
+        user_agent=args.user_agent,
+        verify_tls=not args.insecure,
+        checks=split(args.checks),
+        skip_checks=split(args.skip_checks) or [],
+        ports=args.ports,
+        subdomains=args.subdomains,
+        whois=args.whois,
+    )
+
+
+# ----------------------------------------------------------------- console output
+
+
+def banner(console: Console) -> None:
+    console.print(
+        Panel.fit(
+            f"[bold]SecureScope[/bold] [dim]v{__version__}[/dim]\n[dim]web security posture scanner[/dim]",
+            border_style="yellow",
         )
-    console.print(table)
+    )
 
 
-def show_tls(tls):
-    if not tls or "error" in tls:
-        console.print(f"[yellow]TLS:[/yellow] {tls.get('error', 'not available')}")
-        return
-    table = Table(title="TLS Certificate")
-    table.add_column("Property", style="cyan")
-    table.add_column("Value")
-    table.add_row("Protocol", str(tls["protocol"]))
-    table.add_row("Issuer", str(tls["issuer"]))
-    table.add_row("Subject", str(tls["subject"]))
-    table.add_row("Expires", str(tls["expires"]))
-    table.add_row("Days remaining", str(tls["days"]))
-    console.print(table)
-
-
-def show_dns(dns):
-    table = Table(title="DNS")
-    table.add_column("Type", style="cyan")
-    table.add_column("Value")
-    for ip in dns.get("ipv4", []):
-        table.add_row("IPv4", ip)
-    for ip in dns.get("ipv6", []):
-        table.add_row("IPv6", ip)
-    if "error" in dns:
-        table.add_row("Error", dns["error"])
-    console.print(table)
-
-
-def show_ports(ports):
-    if not ports:
-        return
-    table = Table(title="Open Ports")
-    table.add_column("IP")
-    table.add_column("Port")
-    table.add_column("Service")
-    table.add_column("Status")
-    for port in ports:
-        table.add_row(port["ip"], str(port["port"]), port["service"], port["status"])
-    console.print(table)
-
-
-def show_subdomains(subdomains):
-    if not subdomains:
-        return
-    table = Table(title="Subdomains")
-    table.add_column("Subdomain")
-    table.add_column("IP")
-    table.add_column("HTTPS status")
-    for sub in subdomains:
-        table.add_row(sub["subdomain"], sub["ip"], str(sub["status"]) if sub["status"] else "-")
-    console.print(table)
-
-
-def show_technologies(technologies):
-    table = Table(title="Detected Technologies")
-    table.add_column("Technology")
-    table.add_column("Confidence")
-    techs = technologies.get("technologies", [])
-    if techs:
-        for tech, confidence in techs:
-            table.add_row(str(tech), str(confidence))
-    else:
-        table.add_row("No technologies detected", "-")
-    console.print(table)
-
-
-def show_robots(robots):
-    table = Table(title="robots.txt")
-    table.add_column("Property", style="cyan")
-    table.add_column("Value")
-    table.add_row("Found", "YES" if robots.get("found") else "NO")
-    table.add_row("HTTP status", str(robots.get("status")))
-    table.add_row("Disallow rules", str(len(robots.get("disallow", []))))
-    table.add_row("Allow rules", str(len(robots.get("allow", []))))
-    table.add_row("Sitemaps", str(len(robots.get("sitemaps", []))))
-    console.print(table)
-
-
-def show_securitytxt(securitytxt):
-    table = Table(title="security.txt")
-    table.add_column("Property", style="cyan")
-    table.add_column("Value")
-    table.add_row("Found", "YES" if securitytxt.get("found") else "NO")
-    if securitytxt.get("found"):
-        table.add_row("Location", str(securitytxt.get("location")))
-        for key, values in securitytxt.get("fields", {}).items():
-            table.add_row(key, ", ".join(values))
-    console.print(table)
-
-
-def show_whois(whois_data):
-    if not whois_data or "error" in whois_data:
-        return
-    table = Table(title="WHOIS")
-    table.add_column("Property", style="cyan")
-    table.add_column("Value")
-    for key, value in whois_data.items():
-        if isinstance(value, list):
-            value = ", ".join(value)
-        table.add_row(key.replace("_", " ").title(), str(value))
-    console.print(table)
-
-
-def show_methods(methods):
-    table = Table(title="HTTP Methods")
-    table.add_column("Method", style="cyan")
-    table.add_column("Status")
-    table.add_column("Allowed")
-    for method, data in methods.items():
-        if method == "Allow Header":
+def _evidence_summary(finding: Finding) -> str:
+    bits = []
+    keys = (
+        "name",
+        "directive",
+        "value",
+        "header",
+        "allow_origin",
+        "status",
+        "not_after",
+        "accepted",
+        "error",
+    )
+    for key in keys:
+        value = finding.evidence.get(key)
+        if value in (None, "", [], {}):
             continue
-        table.add_row(method, str(data["status"]), "YES" if data["allowed"] else "NO")
-    console.print(table)
-    if "Allow Header" in methods:
-        console.print("\n[bold]Allow header:[/bold] " + ", ".join(methods["Allow Header"]))
+        if key == "value" and finding.evidence.get("directive"):
+            continue  # the directive names the problem; the whole policy is in the reports
+        text = str(value)
+        if len(text) > 60:
+            text = text[:59] + "…"
+        bits.append(f"{key}={text}")
+        if len(bits) == 2:
+            break
+    return "  ".join(bits)
 
 
-def show_cors(cors):
-    table = Table(title="CORS")
-    table.add_column("Property", style="cyan")
-    table.add_column("Value")
-    for label, key in (
-        ("Allow-Origin", "origin"),
-        ("Allow-Credentials", "credentials"),
-        ("Allow-Methods", "methods"),
-        ("Allow-Headers", "headers"),
-        ("Expose-Headers", "exposed_headers"),
-        ("Max-Age", "max_age"),
-    ):
-        table.add_row(label, str(cors.get(key)))
-    table.add_row("Origin reflected", "YES" if cors.get("reflected") else "NO")
-    verdict = f"[red]YES - {cors.get('finding')}[/red]" if cors.get("vulnerable") else "NO"
-    table.add_row("Potentially vulnerable", verdict)
-    console.print(table)
+def print_target(console: Console, result: ScanResult, show_info: bool) -> None:
+    summary = result.summary
+    grade = summary["grade"]
+    counts = summary["counts"]
+    title = Text.assemble(
+        (f" {grade} ", GRADE_STYLE.get(grade, "bold")),
+        ("  ", ""),
+        (result.target, "bold"),
+        (f"   score {summary['score']}/100", "dim"),
+    )
+    console.print()
+    console.rule(title, align="left")
+    if not result.reachable:
+        console.print(f"[red]Could not fetch the target:[/red] {result.error}")
+
+    console.print(
+        "  ".join(
+            f"[{SEVERITY_STYLE[sev]}]{counts[sev.value]} {sev.value}[/]"
+            for sev in Severity
+            if counts[sev.value] or sev != Severity.INFO
+        )
+    )
+
+    findings = [f for f in result.findings if show_info or f.severity != Severity.INFO]
+    if findings:
+        table = Table(show_header=True, header_style="bold", box=None, pad_edge=False, expand=True)
+        table.add_column("Severity", width=9, no_wrap=True)
+        table.add_column("Finding", ratio=3)
+        table.add_column("Evidence", ratio=2, style="dim")
+        for finding in findings:
+            table.add_row(
+                f"[{SEVERITY_STYLE[finding.severity]}]{finding.severity.value.upper()}[/]",
+                f"{finding.title}\n[dim]{finding.id} · {finding.check}[/dim]",
+                _evidence_summary(finding),
+            )
+        console.print(table)
+    hidden = len(result.findings) - len(findings)
+    if hidden:
+        console.print(f"[dim]{hidden} informational finding(s) hidden; pass --show-info to list them.[/dim]")
+
+    not_run = [c for c in result.checks if c.status != "ok"]
+    if not_run:
+        console.print(
+            "[dim]Not run: " + "; ".join(f"{c.name} ({c.skipped or c.error})" for c in not_run) + "[/dim]"
+        )
 
 
-def show_recommendations(recommendations):
-    if not recommendations:
-        console.print("\n[green]No recommendations - nice.[/green]")
-        return
-    table = Table(title="Security Recommendations")
-    table.add_column("Severity")
-    table.add_column("Issue")
-    table.add_column("Recommendation")
-    colors = {"HIGH": "red", "MEDIUM": "yellow", "LOW": "cyan"}
-    for rec in recommendations:
-        color = colors.get(rec["severity"], "white")
-        table.add_row(f"[{color}]{rec['severity']}[/{color}]", rec["title"], rec["recommendation"])
-    console.print(table)
+def print_summary_line(console: Console, result: ScanResult) -> None:
+    s = result.summary
+    c = s["counts"]
+    console.print(
+        f"[{GRADE_STYLE.get(s['grade'], 'bold')}]{s['grade']:>2}[/] {result.target}  "
+        f"critical={c['critical']} high={c['high']} medium={c['medium']} low={c['low']} info={c['info']}"
+        + ("" if result.reachable else f"  [red]unreachable: {result.error}[/red]")
+    )
 
 
-def main(argv=None):
-    args = parse_arguments(argv)
-    banner()
+def print_diff(console: Console, diff: dict) -> None:
+    c = diff["counts"]
+    console.print()
+    console.print(
+        f"[bold]Baseline comparison:[/bold] {c['new']} new, {c['fixed']} fixed, {c['unchanged']} unchanged"
+    )
+    for raw in diff["new"]:
+        sev = Severity(raw["severity"])
+        console.print(
+            f"  [{SEVERITY_STYLE[sev]}]NEW[/]   {raw['title']}  [dim]{raw['id']} · {raw['target']}[/dim]"
+        )
+    for raw in diff["fixed"]:
+        console.print(f"  [green]FIXED[/] {raw['title']}  [dim]{raw['id']} · {raw['target']}[/dim]")
 
-    target = normalize_url(args.url)
-    console.print(f"\n[bold yellow]Scanning:[/bold yellow] {target}\n")
 
-    results = scan(target, skip_ports=args.skip_ports, skip_subdomains=args.skip_subdomains)
+# ----------------------------------------------------------------- main
 
-    show_headers(results["headers"], results.get("errors", {}).get("headers"))
-    show_cookies(results["cookies"])
-    show_tls(results["tls"])
-    show_dns(results["dns"])
-    show_ports(results["ports"])
-    show_subdomains(results["subdomains"])
-    show_technologies(results["technologies"])
-    show_robots(results["robots"])
-    show_securitytxt(results["securitytxt"])
-    show_whois(results["whois"])
-    show_methods(results["methods"])
-    show_cors(results["cors"])
-    show_recommendations(results["recommendations"])
 
-    if args.html or args.json or args.csv:
-        os.makedirs(args.output, exist_ok=True)
+def main(argv: list[str] | None = None) -> int:
+    parser = build_parser()
+    args = parser.parse_args(argv)
 
-    if args.html:
-        path = generate_html_report(results, os.path.join(args.output, "report.html"))
-        console.print(f"\n[green]HTML report:[/green] {path}")
-    if args.json:
-        path = generate_json_report(results, os.path.join(args.output, "report.json"))
-        console.print(f"[green]JSON report:[/green] {path}")
-    if args.csv:
-        path = generate_csv_report(results, os.path.join(args.output, "report.csv"))
-        console.print(f"[green]CSV report:[/green] {path}")
+    if args.list_checks:
+        for check in ALL_CHECKS:
+            print(f"{check.id:<12} {check.name}")
+        return 0
 
+    console = Console(stderr=bool(args.stdout), no_color=args.no_color, highlight=False)
+
+    targets = list(args.targets)
+    if args.targets_file:
+        try:
+            targets.extend(read_targets_file(args.targets_file))
+        except OSError as exc:
+            parser.error(f"cannot read targets file: {exc}")
+    if not targets:
+        parser.error("no target given (pass a URL, or -t FILE)")
+
+    try:
+        targets = [normalize_url(t) for t in targets]
+        config = config_from_args(args)
+        threshold = Severity.parse(args.fail_on) if args.fail_on else None
+        baseline = load_baseline(args.baseline) if args.baseline else None
+    except (ValueError, OSError) as exc:
+        parser.error(str(exc))
+
+    if not args.quiet and not args.stdout:
+        banner(console)
+        console.print(f"[dim]Scanning {len(targets)} target(s)…[/dim]")
+
+    def progress(target: str, check: CheckResult) -> None:
+        if args.quiet or args.stdout:
+            return
+        mark = "[green]✓[/green]" if check.status == "ok" else "[dim]–[/dim]"
+        count = len(check.findings)
+        console.print(
+            f"  {mark} {check.name:<24} [dim]{target}[/dim]  {count} finding(s)"
+            + (f"  [dim]{check.skipped or check.error}[/dim]" if check.status != "ok" else "")
+        )
+
+    report: Report = scan_targets(targets, config, concurrency=args.concurrency, progress=progress)
+
+    if baseline is not None:
+        report.diff = diff_findings(report.findings, baseline)
+
+    for result in report.targets:
+        if args.quiet:
+            print_summary_line(console, result)
+        else:
+            print_target(console, result, show_info=args.show_info)
+    if report.diff is not None:
+        print_diff(console, report.diff)
+
+    written = []
+    for fmt in args.format or []:
+        written.append(write(report, fmt, args.output, args.name))
+    if written:
+        console.print()
+        for path in written:
+            console.print(f"[green]Report written:[/green] {path}")
+    if args.stdout:
+        sys.stdout.write(render(report, args.stdout))
+        sys.stdout.flush()
+
+    if all(not t.reachable for t in report.targets):
+        console.print("[red]No target could be scanned.[/red]")
+        return 1
+
+    if threshold is not None:
+        considered = new_findings(report.findings, baseline) if baseline is not None else report.findings
+        failing = [f for f in considered if meets_threshold(f, threshold)]
+        if failing:
+            console.print(
+                f"\n[bold red]FAIL[/bold red] {len(failing)} finding(s) at or above {threshold.value}"
+                + (" (new since baseline)" if baseline is not None else "")
+            )
+            return 2
+        console.print(f"\n[bold green]PASS[/bold green] no findings at or above {threshold.value}")
     return 0
 
 

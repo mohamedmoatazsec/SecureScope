@@ -1,9 +1,5 @@
 """Lightweight technology fingerprinting from response headers and markup."""
 
-import requests
-
-from securescope import USER_AGENT
-
 INTERESTING_HEADERS = ["Server", "X-Powered-By", "CF-RAY", "CF-Cache-Status"]
 
 # (needle in the lowercased Server header, technology name)
@@ -53,13 +49,3 @@ def fingerprint(headers, html):
     # Preserve order, drop duplicates.
     result["technologies"] = list(dict.fromkeys(result["technologies"]))
     return result
-
-
-def detect_technologies(url, timeout=10):
-    """Fetch `url` and fingerprint the stack behind it."""
-    try:
-        response = requests.get(url, timeout=timeout, headers={"User-Agent": USER_AGENT})
-    except requests.RequestException as exc:
-        return {"headers": {}, "technologies": [], "error": str(exc)}
-
-    return fingerprint(response.headers, response.text)

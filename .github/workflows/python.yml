@@ -5,6 +5,10 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   lint:
@@ -40,4 +44,33 @@ jobs:
       - name: Smoke-test the console script
         run: |
           securescope --version
+          securescope --list-checks
           securescope --help
+
+  action:
+    name: Self-test the GitHub Action
+    runs-on: ubuntu-latest
+    needs: [test]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Start a local target
+        run: |
+          python -m http.server 8000 --bind 127.0.0.1 --directory tests >/dev/null 2>&1 &
+          sleep 1
+      - name: Scan it with the action (must not fail the job on this fixture)
+        uses: ./
+        with:
+          target: http://127.0.0.1:8000/
+          fail-on: ""
+          formats: "json sarif md html"
+      - name: Reports exist
+        run: ls -la securescope-reports && test -s securescope-reports/securescope-report.sarif
+
+  docker:
+    name: Build container image
+    runs-on: ubuntu-latest
+    needs: [test]
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t securescope:ci .
+      - run: docker run --rm securescope:ci --version
