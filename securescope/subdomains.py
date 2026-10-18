@@ -1,7 +1,11 @@
-import socket
-import requests
-from urllib.parse import urlparse
+"""Subdomain discovery using a small built-in wordlist."""
 
+import socket
+
+import requests
+
+from securescope import USER_AGENT
+from securescope.config import hostname_from_url
 
 COMMON_SUBDOMAINS = [
     "www",
@@ -14,51 +18,34 @@ COMMON_SUBDOMAINS = [
     "ftp",
     "dev",
     "staging",
+    "admin",
+    "test",
 ]
 
 
-def scan_subdomains(url):
-
-    hostname = urlparse(url).hostname
-
-    if not hostname:
-        hostname = url
-
+def scan_subdomains(url, wordlist=None, timeout=3):
+    """Resolve common subdomains of the target and note which answer over HTTPS."""
+    hostname = hostname_from_url(url)
     results = []
 
-    for sub in COMMON_SUBDOMAINS:
-
+    for sub in wordlist or COMMON_SUBDOMAINS:
         target = f"{sub}.{hostname}"
+        try:
+            ip = socket.gethostbyname(target)
+        except socket.gaierror:
+            continue
 
         try:
+            response = requests.get(
+                f"https://{target}",
+                timeout=timeout,
+                allow_redirects=True,
+                headers={"User-Agent": USER_AGENT},
+            )
+            status = response.status_code
+        except requests.RequestException:
+            status = None
 
-            ip = socket.gethostbyname(target)
-
-            try:
-
-                response = requests.get(
-                    f"https://{target}",
-                    timeout=3,
-                    allow_redirects=True,
-                    verify=True,
-                    headers={
-                        "User-Agent": "SecureScope/1.0"
-                    },
-                )
-
-                status = response.status_code
-
-            except Exception:
-
-                status = None
-
-            results.append({
-                "subdomain": target,
-                "ip": ip,
-                "status": status,
-            })
-
-        except socket.gaierror:
-            pass
+        results.append({"subdomain": target, "ip": ip, "status": status})
 
     return results

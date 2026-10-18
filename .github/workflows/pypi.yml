@@ -1,0 +1,46 @@
+name: Publish to PyPI
+
+# Publishes the release to PyPI with trusted publishing (no API token in the repo).
+#
+# One-time setup, then set the repository variable PYPI_PUBLISH=true
+# (Settings → Secrets and variables → Actions → Variables):
+#   1. On PyPI: Your projects → Publishing → Add a new pending publisher
+#        PyPI project name: securescope   (pick another name if it is taken, and
+#                                          change [project].name in pyproject.toml)
+#        Owner: mohamedmoatazsec   Repository: SecureScope
+#        Workflow name: pypi.yml   Environment: pypi
+#   2. On GitHub: Settings → Environments → New environment "pypi"
+#      (optionally require your own approval for deployments).
+# Until the variable is set this workflow skips itself, so releases never fail on it.
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+jobs:
+  publish:
+    name: Build and upload
+    if: vars.PYPI_PUBLISH == 'true'
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/project/securescope/
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Build sdist and wheel
+        run: |
+          python -m pip install --upgrade pip build
+          python -m build
+      - name: Check the distributions
+        run: |
+          python -m pip install --upgrade twine
+          python -m twine check dist/*
+      - name: Upload to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
