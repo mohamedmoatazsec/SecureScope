@@ -30,7 +30,7 @@ CSS = """
 @media (prefers-color-scheme:light){:root{--bg:#f6f7fa;--bg2:#fff;--bg3:#eef0f5;
 --line:rgba(15,23,42,.12);--fg:#121a2c;--muted:#4e5a6e;--faint:#7a8597;--accent:#b4802a;
 --critical:#c0392b;--high:#d35400;--medium:#b4802a;--low:#1f6fb2;--info:#5b6678;--ok:#0f9d6a;
-color-scheme:light}
+color-scheme:light}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--fg);
 font:16px/1.55 Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
