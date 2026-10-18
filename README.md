@@ -3,6 +3,7 @@
 [![CI](https://img.shields.io/github/actions/workflow/status/mohamedmoatazsec/SecureScope/python.yml?branch=main&label=CI)](https://github.com/mohamedmoatazsec/SecureScope/actions)
 ![Python](https://img.shields.io/badge/Python-3.9%2B-blue.svg)
 ![License](https://img.shields.io/badge/License-MIT-green.svg)
+[![PyPI](https://img.shields.io/pypi/v/securescope?color=f2b544&label=PyPI)](https://pypi.org/project/securescope/)
 ![SARIF](https://img.shields.io/badge/output-SARIF%20%7C%20JSON%20%7C%20HTML%20%7C%20Markdown-f2b544)
 
 **Web security posture scanner with evidence-backed findings.** Point it at a site you are
