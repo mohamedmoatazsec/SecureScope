@@ -1,152 +1,143 @@
-def generate_recommendations(results):
+"""Turn raw scan results into prioritised, actionable recommendations."""
 
+SEVERITY_ORDER = {"HIGH": 0, "MEDIUM": 1, "LOW": 2}
+
+REQUIRED_HEADERS = {
+    "Content-Security-Policy": (
+        "HIGH",
+        "Add a Content-Security-Policy that restricts script sources; avoid 'unsafe-inline'.",
+    ),
+    "Strict-Transport-Security": (
+        "HIGH",
+        "Enable HSTS (max-age of at least one year, includeSubDomains) so browsers never fall back to HTTP.",
+    ),
+    "X-Frame-Options": (
+        "MEDIUM",
+        "Send X-Frame-Options: DENY (or a CSP frame-ancestors directive) to prevent clickjacking.",
+    ),
+    "X-Content-Type-Options": (
+        "MEDIUM",
+        "Send X-Content-Type-Options: nosniff to stop MIME-type sniffing.",
+    ),
+    "Referrer-Policy": (
+        "LOW",
+        "Set a Referrer-Policy such as strict-origin-when-cross-origin.",
+    ),
+    "Permissions-Policy": (
+        "LOW",
+        "Use Permissions-Policy to disable browser features the site does not need "
+        "(camera, geolocation, ...).",
+    ),
+}
+
+
+def _rec(severity, title, recommendation):
+    return {"severity": severity, "title": title, "recommendation": recommendation}
+
+
+def generate_recommendations(results):
+    """Build the recommendation list from a full scan result. Pure function."""
     recommendations = []
 
-    # ---------------- Security Headers ----------------
+    # Security headers
+    headers = results.get("headers") or {}
+    for header, (severity, advice) in REQUIRED_HEADERS.items():
+        if headers and not headers.get(header, False):
+            recommendations.append(_rec(severity, f"Missing {header}", advice))
 
-    headers = results.get("headers", {})
-
-    required_headers = {
-        "Content-Security-Policy":
-            ("HIGH", "Add a strong Content-Security-Policy header."),
-
-        "Strict-Transport-Security":
-            ("HIGH", "Enable HTTP Strict Transport Security (HSTS)."),
-
-        "X-Frame-Options":
-            ("MEDIUM", "Protect against clickjacking using X-Frame-Options."),
-
-        "X-Content-Type-Options":
-            ("MEDIUM", "Enable X-Content-Type-Options: nosniff."),
-
-        "Referrer-Policy":
-            ("LOW", "Add a Referrer-Policy header."),
-
-        "Permissions-Policy":
-            ("HIGH", "Restrict browser features using Permissions-Policy."),
-    }
-
-    for header, (severity, advice) in required_headers.items():
-
-        if not headers.get(header, False):
-
-            recommendations.append({
-                "severity": severity,
-                "title": f"Missing {header}",
-                "recommendation": advice,
-            })
-
-    # ---------------- Cookies ----------------
-
-    cookies = results.get("cookies", [])
-
-    for cookie in cookies:
-
+    # Cookies
+    for cookie in results.get("cookies") or []:
+        name = cookie.get("name", "?")
         if not cookie.get("secure"):
-
-            recommendations.append({
-                "severity": "HIGH",
-                "title": f"Cookie '{cookie['name']}' Missing Secure Flag",
-                "recommendation":
-                    "Mark sensitive cookies with the Secure attribute.",
-            })
-
+            recommendations.append(
+                _rec(
+                    "HIGH",
+                    f"Cookie '{name}' missing Secure flag",
+                    "Set the Secure attribute so the cookie is only sent over HTTPS.",
+                )
+            )
         if not cookie.get("httponly"):
+            recommendations.append(
+                _rec(
+                    "MEDIUM",
+                    f"Cookie '{name}' missing HttpOnly flag",
+                    "Set HttpOnly so scripts cannot read the cookie after an XSS.",
+                )
+            )
+        samesite = (cookie.get("samesite") or "").lower()
+        if samesite not in ("lax", "strict"):
+            recommendations.append(
+                _rec(
+                    "LOW",
+                    f"Cookie '{name}' without SameSite=Lax/Strict",
+                    "Set SameSite=Lax (or Strict) to limit cross-site request forgery.",
+                )
+            )
 
-            recommendations.append({
-                "severity": "MEDIUM",
-                "title": f"Cookie '{cookie['name']}' Missing HttpOnly",
-                "recommendation":
-                    "Use the HttpOnly attribute to reduce XSS risk.",
-            })
-
-    # ---------------- TLS ----------------
-
-    tls = results.get("tls", {})
-
-    if tls:
-
-        protocol = tls.get("protocol", "")
-
-        if protocol in ("TLSv1", "TLSv1.1"):
-
-            recommendations.append({
-                "severity": "HIGH",
-                "title": "Legacy TLS Version",
-                "recommendation":
-                    "Upgrade to TLS 1.2 or TLS 1.3.",
-            })
-
+    # TLS
+    tls = results.get("tls") or {}
+    if tls and "error" not in tls:
+        if tls.get("protocol") in ("TLSv1", "TLSv1.1"):
+            recommendations.append(
+                _rec(
+                    "HIGH",
+                    "Legacy TLS version negotiated",
+                    "Disable TLS 1.0/1.1; offer TLS 1.2 and 1.3 only.",
+                )
+            )
         days = tls.get("days", 999)
-
         if days < 30:
-
-            recommendations.append({
-                "severity": "HIGH",
-                "title": "Certificate Expiring Soon",
-                "recommendation":
-                    "Renew the TLS certificate before it expires.",
-            })
-
+            recommendations.append(
+                _rec("HIGH", "Certificate expiring within 30 days", "Renew the TLS certificate now.")
+            )
         elif days < 90:
+            recommendations.append(
+                _rec("MEDIUM", "Certificate expiring within 90 days", "Schedule the certificate renewal.")
+            )
 
-            recommendations.append({
-                "severity": "MEDIUM",
-                "title": "Certificate Near Expiration",
-                "recommendation":
-                    "Plan certificate renewal.",
-            })
-
-    # ---------------- robots.txt ----------------
-
-    robots = results.get("robots", {})
-
+    # robots.txt / security.txt
+    robots = results.get("robots") or {}
     if robots and not robots.get("found"):
+        recommendations.append(
+            _rec("LOW", "robots.txt missing", "Publish a robots.txt so crawlers get explicit guidance.")
+        )
 
-        recommendations.append({
-            "severity": "LOW",
-            "title": "robots.txt Missing",
-            "recommendation":
-                "Consider adding a robots.txt file.",
-        })
-
-    # ---------------- security.txt ----------------
-
-    security = results.get("securitytxt", {})
-
+    security = results.get("securitytxt") or {}
     if security and not security.get("found"):
+        recommendations.append(
+            _rec(
+                "MEDIUM",
+                "security.txt missing",
+                "Publish /.well-known/security.txt (RFC 9116) so researchers know how to report issues.",
+            )
+        )
 
-        recommendations.append({
-            "severity": "MEDIUM",
-            "title": "security.txt Missing",
-            "recommendation":
-                "Publish /.well-known/security.txt to help security researchers.",
-        })
-
-    # ---------------- HTTP Methods ----------------
-
-    methods = results.get("methods", {})
-
+    # HTTP methods
+    methods = results.get("methods") or {}
     if methods.get("TRACE", {}).get("allowed"):
+        recommendations.append(
+            _rec("MEDIUM", "TRACE method enabled", "Disable TRACE to rule out cross-site tracing.")
+        )
 
-        recommendations.append({
-            "severity": "MEDIUM",
-            "title": "TRACE Method Enabled",
-            "recommendation":
-                "Disable the TRACE HTTP method.",
-        })
-
-    # ---------------- CORS ----------------
-
-    cors = results.get("cors", {})
-
+    # CORS
+    cors = results.get("cors") or {}
     if cors.get("vulnerable"):
+        recommendations.append(
+            _rec(
+                "HIGH",
+                f"CORS misconfiguration: {cors.get('finding')}",
+                "Only allow an explicit list of trusted origins; never reflect the request Origin "
+                "when credentials are enabled.",
+            )
+        )
+    elif cors.get("reflected"):
+        recommendations.append(
+            _rec(
+                "LOW",
+                "CORS reflects arbitrary origins",
+                "Restrict Access-Control-Allow-Origin to known origins even without credentials.",
+            )
+        )
 
-        recommendations.append({
-            "severity": "HIGH",
-            "title": "Potential CORS Misconfiguration",
-            "recommendation":
-                "Avoid using wildcard origins together with credentials.",
-        })
-
+    recommendations.sort(key=lambda item: SEVERITY_ORDER.get(item["severity"], 9))
     return recommendations

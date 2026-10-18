@@ -1,34 +1,43 @@
-name: SecureScope CI
+name: CI
 
 on:
   push:
     branches: [main]
-
   pull_request:
     branches: [main]
 
 jobs:
-  test:
+  lint:
+    name: Lint (ruff)
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: "3.12"
+      - run: python -m pip install --upgrade pip ruff
+      - run: ruff check .
+      - run: ruff format --check .
 
-      - name: Install dependencies
+  test:
+    name: Test (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install package with dev extras
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
-
-      - name: Check Python syntax
+          python -m pip install -e ".[dev]"
+      - name: Run tests
+        run: pytest
+      - name: Smoke-test the console script
         run: |
-          python -m compileall .
-
-      - name: Run SecureScope
-        run: |
-          python cli.py https://github.com
+          securescope --version
+          securescope --help
