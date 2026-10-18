@@ -70,11 +70,11 @@ finding. Informational findings are free. A+ ≥ 95, A ≥ 90, B ≥ 80, C ≥ 6
 ## Installation
 
 ```bash
-pip install git+https://github.com/mohamedmoatazsec/SecureScope.git        # the securescope command
-pip install "securescope[whois] @ git+https://github.com/mohamedmoatazsec/SecureScope.git"  # with WHOIS
+pip install securescope            # the securescope command
+pip install "securescope[whois]"   # with WHOIS lookups
 ```
 
-Or from a checkout: `pip install .` Requires Python 3.9+. Wheels are attached to every
+Requires Python 3.9+. Wheels are also attached to every
 [GitHub release](https://github.com/mohamedmoatazsec/SecureScope/releases), and a container image
 is published on every release:
 
