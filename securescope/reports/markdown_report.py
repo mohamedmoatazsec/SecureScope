@@ -15,7 +15,28 @@ BADGE = {
 
 
 def _escape(text: str) -> str:
-    return str(text).replace("|", "\\|").replace("\n", " ")
+    """Neutralise Markdown/HTML from target-derived text.
+
+    Job summaries and PR comments render Markdown, and GitHub-flavoured Markdown allows raw
+    HTML, so `<img>` or `<a>` tags in a header value would otherwise render. Backticks are
+    replaced so a value cannot break out of the code spans the report wraps evidence in.
+    """
+    return (
+        str(text)
+        .replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace("`", "'")
+        .replace("|", "\\|")
+        .replace("\r", " ")
+        .replace("\n", " ")
+    )
+
+
+def _code(text: str) -> str:
+    """Wrap target-derived text in a Markdown code span it cannot break out of."""
+    cleaned = str(text).replace("`", "'").replace("|", "\\|").replace("\r", " ").replace("\n", " ")
+    return f"`{cleaned}`"
 
 
 def _evidence_line(finding: Finding) -> str:
@@ -28,15 +49,15 @@ def _evidence_line(finding: Finding) -> str:
         text = str(value)
         if len(text) > 120:
             text = text[:119] + "…"
-        parts.append(f"`{key}={text}`")
+        parts.append(_code(f"{key}={text}"))
     return ", ".join(parts)
 
 
 def render_target(result: ScanResult) -> str:
     summary = result.summary
-    lines = [f"## {result.target}", ""]
+    lines = [f"## {_escape(result.target)}", ""]
     if not result.reachable:
-        lines.append(f"> ⚠️ Target could not be fetched: {result.error}")
+        lines.append(f"> ⚠️ Target could not be fetched: {_escape(result.error)}")
         lines.append("")
     counts = summary["counts"]
     lines.append(
@@ -53,7 +74,7 @@ def render_target(result: ScanResult) -> str:
         for finding in findings:
             lines.append(
                 f"| {BADGE[finding.severity]} | **{_escape(finding.title)}** (`{finding.id}`) | "
-                f"{_escape(_evidence_line(finding))} |"
+                f"{_evidence_line(finding)} |"
             )
         lines.append("")
         lines.append("<details><summary>Remediation</summary>")
@@ -81,7 +102,7 @@ def render_target(result: ScanResult) -> str:
         lines.append("<details><summary>Checks not run</summary>")
         lines.append("")
         for check in skipped:
-            lines.append(f"- {check.name}: {check.skipped or check.error}")
+            lines.append(f"- {_escape(check.name)}: {_escape(check.skipped or check.error)}")
         lines.append("")
         lines.append("</details>")
     lines.append("")
@@ -102,7 +123,7 @@ def render_markdown(report: Report) -> str:
             s = result.summary
             c = s["counts"]
             lines.append(
-                f"| {result.target} | {s['grade']} | {c['critical']} | {c['high']} | "
+                f"| {_escape(result.target)} | {s['grade']} | {c['critical']} | {c['high']} | "
                 f"{c['medium']} | {c['low']} |"
             )
         lines.append("")
@@ -118,13 +139,13 @@ def render_markdown(report: Report) -> str:
             for raw in report.diff["new"]:
                 lines.append(
                     f"- {BADGE[Severity(raw['severity'])]} {_escape(raw['title'])} (`{raw['id']}`) — "
-                    f"{raw['target']}"
+                    f"{_escape(raw['target'])}"
                 )
         if report.diff["fixed"]:
             lines.append("")
             lines.append("Fixed since baseline:")
             for raw in report.diff["fixed"]:
-                lines.append(f"- ✅ {_escape(raw['title'])} (`{raw['id']}`) — {raw['target']}")
+                lines.append(f"- ✅ {_escape(raw['title'])} (`{raw['id']}`) — {_escape(raw['target'])}")
         lines.append("")
     for result in report.targets:
         lines.append(render_target(result))

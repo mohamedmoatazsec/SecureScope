@@ -13,6 +13,7 @@ import sys
 from pathlib import Path
 
 from rich.console import Console
+from rich.markup import escape as rich_escape
 from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
@@ -209,6 +210,11 @@ def banner(console: Console) -> None:
     )
 
 
+def safe(text: object) -> str:
+    """Escape target-derived text so a hostile header value cannot inject rich markup (or crash it)."""
+    return rich_escape(str(text))
+
+
 def _evidence_summary(finding: Finding) -> str:
     bits = []
     keys = (
@@ -231,7 +237,7 @@ def _evidence_summary(finding: Finding) -> str:
         text = str(value)
         if len(text) > 60:
             text = text[:59] + "…"
-        bits.append(f"{key}={text}")
+        bits.append(f"{key}={safe(text)}")
         if len(bits) == 2:
             break
     return "  ".join(bits)
@@ -250,7 +256,7 @@ def print_target(console: Console, result: ScanResult, show_info: bool) -> None:
     console.print()
     console.rule(title, align="left")
     if not result.reachable:
-        console.print(f"[red]Could not fetch the target:[/red] {result.error}")
+        console.print(f"[red]Could not fetch the target:[/red] {safe(result.error)}")
 
     console.print(
         "  ".join(
@@ -269,7 +275,7 @@ def print_target(console: Console, result: ScanResult, show_info: bool) -> None:
         for finding in findings:
             table.add_row(
                 f"[{SEVERITY_STYLE[finding.severity]}]{finding.severity.value.upper()}[/]",
-                f"{finding.title}\n[dim]{finding.id} · {finding.check}[/dim]",
+                f"{safe(finding.title)}\n[dim]{safe(finding.id)} · {safe(finding.check)}[/dim]",
                 _evidence_summary(finding),
             )
         console.print(table)
@@ -280,7 +286,9 @@ def print_target(console: Console, result: ScanResult, show_info: bool) -> None:
     not_run = [c for c in result.checks if c.status != "ok"]
     if not_run:
         console.print(
-            "[dim]Not run: " + "; ".join(f"{c.name} ({c.skipped or c.error})" for c in not_run) + "[/dim]"
+            "[dim]Not run: "
+            + "; ".join(f"{safe(c.name)} ({safe(c.skipped or c.error)})" for c in not_run)
+            + "[/dim]"
         )
 
 
@@ -288,9 +296,9 @@ def print_summary_line(console: Console, result: ScanResult) -> None:
     s = result.summary
     c = s["counts"]
     console.print(
-        f"[{GRADE_STYLE.get(s['grade'], 'bold')}]{s['grade']:>2}[/] {result.target}  "
+        f"[{GRADE_STYLE.get(s['grade'], 'bold')}]{s['grade']:>2}[/] {safe(result.target)}  "
         f"critical={c['critical']} high={c['high']} medium={c['medium']} low={c['low']} info={c['info']}"
-        + ("" if result.reachable else f"  [red]unreachable: {result.error}[/red]")
+        + ("" if result.reachable else f"  [red]unreachable: {safe(result.error)}[/red]")
     )
 
 
@@ -303,10 +311,13 @@ def print_diff(console: Console, diff: dict) -> None:
     for raw in diff["new"]:
         sev = Severity(raw["severity"])
         console.print(
-            f"  [{SEVERITY_STYLE[sev]}]NEW[/]   {raw['title']}  [dim]{raw['id']} · {raw['target']}[/dim]"
+            f"  [{SEVERITY_STYLE[sev]}]NEW[/]   {safe(raw['title'])}  "
+            f"[dim]{safe(raw['id'])} · {safe(raw['target'])}[/dim]"
         )
     for raw in diff["fixed"]:
-        console.print(f"  [green]FIXED[/] {raw['title']}  [dim]{raw['id']} · {raw['target']}[/dim]")
+        console.print(
+            f"  [green]FIXED[/] {safe(raw['title'])}  [dim]{safe(raw['id'])} · {safe(raw['target'])}[/dim]"
+        )
 
 
 # ----------------------------------------------------------------- main
@@ -337,7 +348,7 @@ def main(argv: list[str] | None = None) -> int:
         config = config_from_args(args)
         threshold = Severity.parse(args.fail_on) if args.fail_on else None
         baseline = load_baseline(args.baseline) if args.baseline else None
-    except (ValueError, OSError) as exc:
+    except (ValueError, OSError, KeyError, TypeError) as exc:
         parser.error(str(exc))
 
     if not args.quiet and not args.stdout:
@@ -350,8 +361,8 @@ def main(argv: list[str] | None = None) -> int:
         mark = "[green]✓[/green]" if check.status == "ok" else "[dim]–[/dim]"
         count = len(check.findings)
         console.print(
-            f"  {mark} {check.name:<24} [dim]{target}[/dim]  {count} finding(s)"
-            + (f"  [dim]{check.skipped or check.error}[/dim]" if check.status != "ok" else "")
+            f"  {mark} {check.name:<24} [dim]{safe(target)}[/dim]  {count} finding(s)"
+            + (f"  [dim]{safe(check.skipped or check.error)}[/dim]" if check.status != "ok" else "")
         )
 
     report: Report = scan_targets(targets, config, concurrency=args.concurrency, progress=progress)

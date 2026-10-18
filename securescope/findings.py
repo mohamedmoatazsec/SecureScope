@@ -35,6 +35,19 @@ class Severity(str, Enum):
             raise ValueError(f"unknown severity {value!r} (expected one of: {choices})") from exc
 
 
+EVIDENCE_LIMIT = 1000
+
+
+def _cap(value: Any, limit: int = EVIDENCE_LIMIT) -> Any:
+    if isinstance(value, str) and len(value) > limit:
+        return value[: limit - 1] + "…"
+    if isinstance(value, list):
+        return [_cap(v, limit) for v in value[:50]]
+    if isinstance(value, dict):
+        return {str(k)[:100]: _cap(v, limit) for k, v in list(value.items())[:50]}
+    return value
+
+
 _SEVERITY_RANK = {
     Severity.CRITICAL: 0,
     Severity.HIGH: 1,
@@ -70,6 +83,11 @@ class Finding:
     references: list[str] = field(default_factory=list)
     cwe: int | None = None
     target: str = ""
+
+    def __post_init__(self) -> None:
+        # Evidence quotes values from the target; cap them so a 1 MB header cannot bloat every report.
+        self.evidence = {k: _cap(v) for k, v in self.evidence.items()}
+        self.title = _cap(self.title, 300)
 
     def fingerprint(self) -> str:
         """Stable identity used by baseline diffs: same issue, same place."""

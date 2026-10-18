@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 from urllib.parse import urlsplit
 
@@ -22,6 +22,9 @@ class ScanContext:
     config: ScanConfig
     response: requests.Response | None = None
     fetch_error: str | None = None
+    hops: list[dict[str, Any]] = field(default_factory=list)
+    redirect_blocked: dict[str, str] | None = None  # {"location", "reason"} when a redirect was refused
+    body_truncated: bool = False
 
     @property
     def parts(self):
