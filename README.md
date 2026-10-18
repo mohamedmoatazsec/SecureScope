@@ -74,8 +74,9 @@ pip install git+https://github.com/mohamedmoatazsec/SecureScope.git        # the
 pip install "securescope[whois] @ git+https://github.com/mohamedmoatazsec/SecureScope.git"  # with WHOIS
 ```
 
-Or from a checkout: `pip install .` Requires Python 3.9+. A container image is published on
-every release:
+Or from a checkout: `pip install .` Requires Python 3.9+. Wheels are attached to every
+[GitHub release](https://github.com/mohamedmoatazsec/SecureScope/releases), and a container image
+is published on every release:
 
 ```bash
 docker run --rm -v "$PWD/reports:/reports" ghcr.io/mohamedmoatazsec/securescope example.com -f html
