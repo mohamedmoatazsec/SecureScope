@@ -46,12 +46,16 @@ def _rule(finding: Finding) -> dict[str, Any]:
             "markdown": f"**Remediation**\n\n{finding.remediation}\n\n"
             + "\n".join(f"- {ref}" for ref in finding.references),
         },
-        "helpUri": finding.references[0] if finding.references else "https://github.com/mohamedmoatazsec/SecureScope",
+        "helpUri": finding.references[0]
+        if finding.references
+        else "https://github.com/mohamedmoatazsec/SecureScope",
         "defaultConfiguration": {"level": SARIF_LEVEL[finding.severity]},
         "properties": {
             "tags": tags,
             "security-severity": SECURITY_SEVERITY[finding.severity],
-            "precision": {"certain": "very-high", "firm": "high", "tentative": "medium"}[finding.confidence.value],
+            "precision": {"certain": "very-high", "firm": "high", "tentative": "medium"}[
+                finding.confidence.value
+            ],
         },
     }
 
@@ -64,11 +68,17 @@ def _result(finding: Finding) -> dict[str, Any]:
         "locations": [
             {
                 "physicalLocation": {"artifactLocation": {"uri": finding.target}},
-                "logicalLocations": [{"name": str(finding.evidence.get("name", finding.check)), "kind": "resource"}],
+                "logicalLocations": [
+                    {"name": str(finding.evidence.get("name", finding.check)), "kind": "resource"}
+                ],
             }
         ],
         "partialFingerprints": {"securescope/v1": finding.fingerprint()},
-        "properties": {"evidence": finding.evidence, "check": finding.check, "severity": finding.severity.value},
+        "properties": {
+            "evidence": finding.evidence,
+            "check": finding.check,
+            "severity": finding.severity.value,
+        },
     }
 
 

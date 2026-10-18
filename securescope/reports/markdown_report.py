@@ -51,7 +51,10 @@ def render_target(result: ScanResult) -> str:
         lines.append("| Severity | Finding | Evidence |")
         lines.append("|---|---|---|")
         for finding in findings:
-            lines.append(f"| {BADGE[finding.severity]} | **{_escape(finding.title)}** (`{finding.id}`) | {_escape(_evidence_line(finding))} |")
+            lines.append(
+                f"| {BADGE[finding.severity]} | **{_escape(finding.title)}** (`{finding.id}`) | "
+                f"{_escape(_evidence_line(finding))} |"
+            )
         lines.append("")
         lines.append("<details><summary>Remediation</summary>")
         lines.append("")
@@ -86,25 +89,37 @@ def render_target(result: ScanResult) -> str:
 
 
 def render_markdown(report: Report) -> str:
-    lines = [f"# SecureScope report", "", f"_{report.tool} {report.version} · generated {report.generated}_", ""]
+    lines = [
+        "# SecureScope report",
+        "",
+        f"_{report.tool} {report.version} · generated {report.generated}_",
+        "",
+    ]
     if len(report.targets) > 1:
         lines.append("| Target | Grade | Critical | High | Medium | Low |")
         lines.append("|---|---|---|---|---|---|")
         for result in report.targets:
             s = result.summary
             c = s["counts"]
-            lines.append(f"| {result.target} | {s['grade']} | {c['critical']} | {c['high']} | {c['medium']} | {c['low']} |")
+            lines.append(
+                f"| {result.target} | {s['grade']} | {c['critical']} | {c['high']} | "
+                f"{c['medium']} | {c['low']} |"
+            )
         lines.append("")
     if report.diff is not None:
         counts = report.diff["counts"]
         lines.append(
-            f"**Compared with baseline:** {counts['new']} new, {counts['fixed']} fixed, {counts['unchanged']} unchanged."
+            f"**Compared with baseline:** {counts['new']} new, {counts['fixed']} fixed, "
+            f"{counts['unchanged']} unchanged."
         )
         if report.diff["new"]:
             lines.append("")
             lines.append("New findings:")
             for raw in report.diff["new"]:
-                lines.append(f"- {BADGE[Severity(raw['severity'])]} {_escape(raw['title'])} (`{raw['id']}`) — {raw['target']}")
+                lines.append(
+                    f"- {BADGE[Severity(raw['severity'])]} {_escape(raw['title'])} (`{raw['id']}`) — "
+                    f"{raw['target']}"
+                )
         if report.diff["fixed"]:
             lines.append("")
             lines.append("Fixed since baseline:")
@@ -114,6 +129,9 @@ def render_markdown(report: Report) -> str:
     for result in report.targets:
         lines.append(render_target(result))
     lines.append("---")
-    lines.append("Scan only systems you own or are authorised to test. Findings are configuration observations; verify impact before reporting.")
+    lines.append(
+        "Scan only systems you own or are authorised to test. Findings are configuration observations; "
+        "verify impact before reporting."
+    )
     lines.append("")
     return "\n".join(lines)
