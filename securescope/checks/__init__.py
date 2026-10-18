@@ -18,9 +18,11 @@ from securescope.checks.recon import (
     TechnologyCheck,
     WhoisCheck,
 )
+from securescope.checks.target import TargetCheck
 from securescope.checks.tls import TLSCheck
 
 ALL_CHECKS: list[type[Check]] = [
+    TargetCheck,
     TLSCheck,
     HeadersCheck,
     CSPCheck,

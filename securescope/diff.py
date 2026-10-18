@@ -11,11 +11,19 @@ from securescope.findings import Finding, sort_findings
 
 def load_baseline(path: str) -> list[Finding]:
     """Read the findings out of a JSON report written by an earlier run."""
-    data = json.loads(Path(path).read_text(encoding="utf-8"))
+    try:
+        data = json.loads(Path(path).read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"baseline {path} is not valid JSON: {exc}") from exc
+    if not isinstance(data, dict) or data.get("tool") != "SecureScope":
+        raise ValueError(f"baseline {path} is not a SecureScope JSON report")
     findings: list[Finding] = []
     for target in data.get("targets", []):
         for raw in target.get("findings", []):
-            findings.append(Finding.from_dict(raw))
+            try:
+                findings.append(Finding.from_dict(raw))
+            except (KeyError, TypeError, ValueError) as exc:
+                raise ValueError(f"baseline {path} has a malformed finding: {exc}") from exc
     return findings
 
 
