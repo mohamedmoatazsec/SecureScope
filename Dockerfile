@@ -1,11 +1,11 @@
 # Minimal image: `docker run --rm ghcr.io/mohamedmoatazsec/securescope example.com`
-FROM python:3.12-slim AS build
+FROM python:3.15-slim AS build
 WORKDIR /src
 COPY pyproject.toml README.md LICENSE ./
 COPY securescope ./securescope
 RUN python -m pip install --no-cache-dir --upgrade pip && python -m pip wheel --no-deps -w /wheels .
 
-FROM python:3.12-slim
+FROM python:3.15-slim
 LABEL org.opencontainers.image.source="https://github.com/mohamedmoatazsec/SecureScope" \
       org.opencontainers.image.description="Web security posture scanner with evidence-backed findings" \
       org.opencontainers.image.licenses="MIT"
