@@ -120,7 +120,7 @@ report to the job summary, and exposes the exit code:
 
 ```yaml
 - name: Web security posture
-  uses: mohamedmoatazsec/SecureScope@v2
+  uses: mohamedmoatazsec/SecureScope@v2.0.1
   with:
     target: https://staging.example.com
     fail-on: high
