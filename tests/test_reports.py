@@ -142,3 +142,10 @@ def test_diff_new_fixed_unchanged():
 
     fixed = diff_findings([], current)
     assert fixed["counts"]["fixed"] == 2 and fixed["counts"]["new"] == 0
+
+
+def test_html_stylesheet_is_well_formed():
+    from securescope.reports.html_report import CSS
+
+    assert CSS.count("{") == CSS.count("}")
+    assert "@media (prefers-color-scheme:light){:root{" in CSS
