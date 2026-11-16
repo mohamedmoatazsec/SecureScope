@@ -25,7 +25,8 @@ jobs:
 
   test:
     name: Test (Python ${{ matrix.python-version }})
-    runs-on: ubuntu-latest
+    # Ubuntu 26.04 has no Python 3.9 build; keep the supported-version matrix runnable.
+    runs-on: ubuntu-22.04
     strategy:
       fail-fast: false
       matrix:
