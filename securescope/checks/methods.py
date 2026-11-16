@@ -97,7 +97,7 @@ class MethodsCheck(Check):
         facts: dict[str, Any] = {"allowed": [], "options_status": None, "trace_status": None}
 
         try:
-            options = ctx.session.request("OPTIONS", ctx.target, allow_redirects=False)
+            options = ctx.session.request("OPTIONS", ctx.target, allow_redirects=False, limit=0)
             facts["options_status"] = options.status_code
             allowed = parse_allow_header(options.headers.get("Allow")) or parse_allow_header(
                 options.headers.get("Access-Control-Allow-Methods")
@@ -110,7 +110,9 @@ class MethodsCheck(Check):
         trace_echoed = False
         try:
             marker = "X-SecureScope-Trace"
-            trace = ctx.session.request("TRACE", ctx.target, headers={marker: "1"}, allow_redirects=False)
+            trace = ctx.session.request(
+                "TRACE", ctx.target, headers={marker: "1"}, allow_redirects=False, limit=8192
+            )
             facts["trace_status"] = trace.status_code
             body = trace.text[:4096] if trace.text else ""
             trace_echoed = marker.lower() in body.lower()

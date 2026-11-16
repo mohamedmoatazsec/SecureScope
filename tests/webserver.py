@@ -26,6 +26,8 @@ class Profile:
         robots: str | None = None,
         security_txt: str | None = None,
         status: int = 200,
+        redirect_to: str | None = None,
+        redirect_status: int = 302,
     ):
         self.headers = headers or {}
         self.cookies = cookies or []
@@ -38,6 +40,8 @@ class Profile:
         self.robots = robots
         self.security_txt = security_txt
         self.status = status
+        self.redirect_to = redirect_to
+        self.redirect_status = redirect_status
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -86,6 +90,9 @@ class Handler(BaseHTTPRequestHandler):
             if p.security_txt is None:
                 return self._send(404, b"not found", "text/plain")
             return self._send(200, p.security_txt.encode(), "text/plain")
+
+        if p.redirect_to and self.path == "/":
+            return self._send(p.redirect_status, b"", "text/plain", {"Location": p.redirect_to})
 
         self.send_response(p.status)
         body = p.body.encode()

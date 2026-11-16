@@ -14,7 +14,7 @@ from securescope import __version__
 from securescope.checks import ALL_CHECKS, ScanContext
 from securescope.config import ScanConfig, normalize_url
 from securescope.findings import CheckResult, Finding, sort_findings
-from securescope.http import ScanSession
+from securescope.http import RedirectBlocked, ScanSession, read_body
 from securescope.scoring import summarize
 
 
@@ -77,11 +77,37 @@ class Report:
         return data
 
 
-def fetch_target(session: ScanSession, target: str) -> tuple[requests.Response | None, str | None]:
+@dataclass
+class Fetched:
+    response: requests.Response | None = None
+    error: str | None = None
+    hops: list[dict[str, Any]] = field(default_factory=list)
+    redirect_blocked: dict[str, str] | None = None
+    truncated: bool = False
+
+
+def fetch_target(session: ScanSession, target: str) -> Fetched:
+    """GET the target with the hardened fetch; a refused redirect still yields the last response."""
     try:
-        return session.get(target), None
+        response = session.get(target)
+    except RedirectBlocked as exc:
+        last = exc.response
+        hops = list(getattr(last, "securescope_hops", []) or [])
+        if last is not None:
+            read_body(last, 0)
+            last.history = []
+        return Fetched(
+            response=last,
+            hops=hops,
+            redirect_blocked={"location": exc.location, "reason": str(exc.args[0])},
+        )
     except requests.RequestException as exc:
-        return None, str(exc)
+        return Fetched(error=str(exc))
+    return Fetched(
+        response=response,
+        hops=list(getattr(response, "securescope_hops", []) or []),
+        truncated=bool(getattr(response, "securescope_truncated", False)),
+    )
 
 
 def scan_target(
@@ -96,16 +122,23 @@ def scan_target(
     clock = time.monotonic()
 
     with ScanSession(config) as session:
-        response, fetch_error = fetch_target(session, target)
+        fetched = fetch_target(session, target)
         ctx = ScanContext(
-            target=target, session=session, config=config, response=response, fetch_error=fetch_error
+            target=target,
+            session=session,
+            config=config,
+            response=fetched.response,
+            fetch_error=fetched.error,
+            hops=fetched.hops,
+            redirect_blocked=fetched.redirect_blocked,
+            body_truncated=fetched.truncated,
         )
         result = ScanResult(
             target=target,
             started=started.strftime("%Y-%m-%dT%H:%M:%SZ"),
             duration=0.0,
-            reachable=response is not None,
-            error=fetch_error,
+            reachable=fetched.response is not None,
+            error=fetched.error,
         )
 
         for check_cls in ALL_CHECKS:

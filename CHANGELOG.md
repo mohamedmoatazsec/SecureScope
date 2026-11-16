@@ -3,6 +3,43 @@
 All notable changes to SecureScope are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.0.1] - 2026-10-18
+
+A hardening release from reviewing the scanner's own attack surface: everything a hostile
+target can send is now treated as data in every output, and the scanner cannot be steered or
+exhausted by the site it is scanning.
+
+### Security
+- **Console output could be crashed or styled by the target.** Header values were passed to
+  the console library's markup parser; a `Server: [/]` header raised an error and aborted the
+  report, and `[link=…]` could inject styling. All target-derived text is now escaped.
+- **CSV formula injection.** Cells beginning with `=`, `+`, `-`, `@`, tab or carriage return are
+  prefixed with a quote so a header such as `Server: =HYPERLINK(...)` is literal text in Excel
+  and LibreOffice.
+- **Markdown output could carry raw HTML** from the target into job summaries and pull-request
+  comments. Target-derived text is HTML-escaped and evidence is kept inside code spans that
+  the target cannot break out of.
+- **Redirects are followed by hand**, at most 5 hops, and a public target can no longer redirect
+  the scanner into loopback, link-local or private address space (a scanner in CI would
+  otherwise be a way to reach cloud metadata endpoints and internal services). A refused hop
+  is reported as `REDIRECT-TO-INTERNAL-ADDRESS`.
+- **Response bodies are capped** at 2 MB (header-only probes read nothing), and evidence values
+  are capped at 1000 characters, so a target cannot exhaust memory or bloat reports.
+- GitHub Action inputs are passed through environment variables instead of being interpolated
+  into the shell script.
+- CodeQL (security-extended) runs on every push and weekly; Dependabot keeps actions, Python
+  dependencies and the base image updated.
+
+### Added
+- `target` check: redirect chain facts, `REDIRECT-HTTPS-TO-HTTP` (medium) when an HTTPS page
+  redirects to plain HTTP, `TARGET-REDIRECTED` (info) when the final host differs, and
+  `RESPONSE-BODY-TRUNCATED` (info).
+
+### Fixed
+- `CORS-NO-VARY-ORIGIN` fired for a fixed, non-reflected `Access-Control-Allow-Origin`; it now
+  only applies when the origin is reflected.
+- A malformed `--baseline` file produces a clear error instead of a traceback.
+
 ## [2.0.0] - 2026-10-18
 
 A rewrite around one idea: every result is an evidence-backed finding with a stable id, a
