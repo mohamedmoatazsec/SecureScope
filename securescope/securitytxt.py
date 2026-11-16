@@ -1,6 +1,10 @@
-import requests
+"""security.txt (RFC 9116) discovery and parsing."""
+
 from urllib.parse import urljoin
 
+import requests
+
+from securescope import USER_AGENT
 
 SECURITY_TXT_PATHS = [
     "/.well-known/security.txt",
@@ -8,8 +12,20 @@ SECURITY_TXT_PATHS = [
 ]
 
 
-def scan_securitytxt(url):
+def parse_security_txt(text):
+    """Parse security.txt fields into {field: [values]}. Pure function."""
+    fields = {}
+    for raw in text.splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#") or ":" not in line:
+            continue
+        key, value = line.split(":", 1)
+        fields.setdefault(key.strip(), []).append(value.strip())
+    return fields
 
+
+def scan_securitytxt(url, timeout=10):
+    """Look for a security.txt at the standard and legacy locations."""
     result = {
         "found": False,
         "location": None,
@@ -17,59 +33,25 @@ def scan_securitytxt(url):
         "fields": {},
     }
 
-    headers = {
-        "User-Agent": "SecureScope/1.0"
-    }
-
-    try:
-
-        for path in SECURITY_TXT_PATHS:
-
-            target = urljoin(url, path)
-
+    for path in SECURITY_TXT_PATHS:
+        target = urljoin(url, path)
+        try:
             response = requests.get(
                 target,
-                timeout=10,
-                headers=headers,
+                timeout=timeout,
+                headers={"User-Agent": USER_AGENT},
             )
-
-            if response.status_code != 200:
-                continue
-
-            result["found"] = True
-            result["location"] = target
-            result["status"] = response.status_code
-
-            for line in response.text.splitlines():
-
-                line = line.strip()
-
-                if not line:
-                    continue
-
-                if line.startswith("#"):
-                    continue
-
-                if ":" not in line:
-                    continue
-
-                key, value = line.split(":", 1)
-
-                key = key.strip()
-
-                value = value.strip()
-
-                if key not in result["fields"]:
-                    result["fields"][key] = []
-
-                result["fields"][key].append(value)
-
+        except requests.RequestException as exc:
+            result["error"] = str(exc)
             return result
 
+        if response.status_code != 200:
+            continue
+
+        result["found"] = True
+        result["location"] = target
+        result["status"] = response.status_code
+        result["fields"] = parse_security_txt(response.text)
         return result
 
-    except Exception as e:
-
-        result["error"] = str(e)
-
-        return result
+    return result

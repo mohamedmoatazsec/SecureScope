@@ -32,3 +32,5 @@ reports/
 # OS files
 .DS_Store
 Thumbs.db
+# Reports written by `securescope -o reports/`
+reports/

@@ -1,84 +1,65 @@
+"""Lightweight technology fingerprinting from response headers and markup."""
+
 import requests
 
+from securescope import USER_AGENT
 
-def detect_technologies(url):
+INTERESTING_HEADERS = ["Server", "X-Powered-By", "CF-RAY", "CF-Cache-Status"]
 
-    result = {
-        "headers": {},
-        "technologies": [],
-    }
+# (needle in the lowercased Server header, technology name)
+SERVER_SIGNATURES = [
+    ("github.com", "GitHub"),
+    ("cloudflare", "Cloudflare"),
+    ("nginx", "Nginx"),
+    ("apache", "Apache"),
+    ("microsoft-iis", "Microsoft IIS"),
+    ("litespeed", "LiteSpeed"),
+    ("openresty", "OpenResty"),
+]
 
+# (needle in the lowercased HTML, technology name)
+HTML_SIGNATURES = [
+    ("bootstrap", "Bootstrap"),
+    ("jquery", "jQuery"),
+    ("wp-content", "WordPress"),
+    ("react", "React"),
+]
+
+
+def fingerprint(headers, html):
+    """Derive technologies from a header mapping and page HTML. Pure function."""
+    result = {"headers": {}, "technologies": []}
+
+    lowered = {str(k).lower(): v for k, v in headers.items()}
+    for name in INTERESTING_HEADERS:
+        if name.lower() in lowered:
+            result["headers"][name] = lowered[name.lower()]
+
+    server = str(lowered.get("server", "")).lower()
+    powered = str(lowered.get("x-powered-by", ""))
+    html = (html or "").lower()
+
+    for needle, tech in SERVER_SIGNATURES:
+        if needle in server:
+            result["technologies"].append((tech, "HIGH"))
+
+    if powered:
+        result["technologies"].append((powered, "HIGH"))
+
+    for needle, tech in HTML_SIGNATURES:
+        if needle in html:
+            result["technologies"].append((tech, "MEDIUM"))
+
+    # Preserve order, drop duplicates.
+    result["technologies"] = list(dict.fromkeys(result["technologies"]))
+    return result
+
+
+def detect_technologies(url, timeout=10):
+    """Fetch `url` and fingerprint the stack behind it."""
     try:
+        response = requests.get(url, timeout=timeout, headers={"User-Agent": USER_AGENT})
+    except requests.RequestException as exc:
+        return {"headers": {}, "technologies": [], "error": str(exc)}
 
-        response = requests.get(
-            url,
-            timeout=10,
-            headers={"User-Agent": "SecureScope/1.0"},
-        )
-
-        headers = response.headers
-        html = response.text.lower()
-
-        # حفظ أهم الـ Headers
-        interesting = [
-            "Server",
-            "X-Powered-By",
-            "CF-RAY",
-            "CF-Cache-Status",
-        ]
-
-        for h in interesting:
-            if h in headers:
-                result["headers"][h] = headers[h]
-
-        # -------- HIGH confidence --------
-
-        if headers.get("Server", "").lower() == "github.com":
-            result["technologies"].append(
-                ("GitHub", "HIGH")
-            )
-
-        if "cloudflare" in headers.get("Server", "").lower():
-            result["technologies"].append(
-                ("Cloudflare", "HIGH")
-            )
-
-        if "nginx" in headers.get("Server", "").lower():
-            result["technologies"].append(
-                ("Nginx", "HIGH")
-            )
-
-        if "apache" in headers.get("Server", "").lower():
-            result["technologies"].append(
-                ("Apache", "HIGH")
-            )
-
-        if "microsoft-iis" in headers.get("Server", "").lower():
-            result["technologies"].append(
-                ("Microsoft IIS", "HIGH")
-            )
-
-        # -------- MEDIUM confidence --------
-
-        if "bootstrap" in html:
-            result["technologies"].append(
-                ("Bootstrap", "MEDIUM")
-            )
-
-        if "jquery" in html:
-            result["technologies"].append(
-                ("jQuery", "MEDIUM")
-            )
-
-        # إزالة التكرار
-        result["technologies"] = list(
-            dict.fromkeys(result["technologies"])
-        )
-
-        return result
-
-    except Exception as e:
-
-        result["error"] = str(e)
-
-        return result
+    return fingerprint(response.headers, response.text)
