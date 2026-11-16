@@ -5,7 +5,7 @@ import socket
 import requests
 
 from securescope import USER_AGENT
-from securescope.tls import hostname_from_url
+from securescope.config import hostname_from_url
 
 COMMON_SUBDOMAINS = [
     "www",

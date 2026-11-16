@@ -2,7 +2,7 @@
 
 from datetime import datetime
 
-from securescope.tls import hostname_from_url
+from securescope.config import hostname_from_url
 
 
 def _first(value):
@@ -25,8 +25,8 @@ def scan_whois(url):
 
     try:
         import whois  # python-whois; imported lazily so the rest works without it
-    except ImportError as exc:
-        result["error"] = f"python-whois not installed: {exc}"
+    except ImportError:
+        result["error"] = "python-whois is not installed (pip install 'securescope[whois]')"
         return result
 
     try:

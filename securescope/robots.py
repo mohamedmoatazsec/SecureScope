@@ -1,10 +1,4 @@
-"""robots.txt discovery and parsing."""
-
-from urllib.parse import urljoin
-
-import requests
-
-from securescope import USER_AGENT
+"""robots.txt parsing."""
 
 
 def parse_robots(text):
@@ -37,35 +31,4 @@ def parse_robots(text):
         elif key == "host":
             result["hosts"].append(value)
 
-    return result
-
-
-def scan_robots(url, timeout=10):
-    """Fetch and parse /robots.txt for the site hosting `url`."""
-    result = {
-        "found": False,
-        "status": None,
-        "disallow": [],
-        "allow": [],
-        "sitemaps": [],
-        "crawl_delay": None,
-        "hosts": [],
-    }
-
-    try:
-        response = requests.get(
-            urljoin(url, "/robots.txt"),
-            timeout=timeout,
-            headers={"User-Agent": USER_AGENT},
-        )
-    except requests.RequestException as exc:
-        result["error"] = str(exc)
-        return result
-
-    result["status"] = response.status_code
-    if response.status_code != 200:
-        return result
-
-    result["found"] = True
-    result.update(parse_robots(response.text))
     return result

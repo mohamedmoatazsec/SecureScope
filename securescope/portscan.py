@@ -7,7 +7,7 @@ and sequential rather than a full port sweep.
 
 import socket
 
-from securescope.tls import hostname_from_url
+from securescope.config import hostname_from_url
 
 COMMON_PORTS = {
     21: "FTP",

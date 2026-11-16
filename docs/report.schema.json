@@ -1,0 +1,96 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/mohamedmoatazsec/SecureScope/blob/main/docs/report.schema.json",
+  "title": "SecureScope JSON report",
+  "type": "object",
+  "required": ["tool", "version", "generated", "summary", "targets"],
+  "properties": {
+    "schema": { "type": "string" },
+    "tool": { "const": "SecureScope" },
+    "version": { "type": "string" },
+    "generated": { "type": "string", "format": "date-time" },
+    "summary": { "$ref": "#/$defs/summary" },
+    "targets": { "type": "array", "items": { "$ref": "#/$defs/target" } },
+    "diff": {
+      "type": "object",
+      "description": "Present when the scan was compared with a --baseline report",
+      "required": ["new", "fixed", "unchanged", "counts"],
+      "properties": {
+        "new": { "type": "array", "items": { "$ref": "#/$defs/finding" } },
+        "fixed": { "type": "array", "items": { "$ref": "#/$defs/finding" } },
+        "unchanged": { "type": "integer" },
+        "counts": {
+          "type": "object",
+          "properties": { "new": { "type": "integer" }, "fixed": { "type": "integer" }, "unchanged": { "type": "integer" } }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "severity": { "enum": ["critical", "high", "medium", "low", "info"] },
+    "summary": {
+      "type": "object",
+      "required": ["score", "grade", "counts", "total"],
+      "properties": {
+        "score": { "type": "integer", "minimum": 0, "maximum": 100 },
+        "grade": { "enum": ["A+", "A", "B", "C", "D", "F"] },
+        "counts": {
+          "type": "object",
+          "properties": {
+            "critical": { "type": "integer" },
+            "high": { "type": "integer" },
+            "medium": { "type": "integer" },
+            "low": { "type": "integer" },
+            "info": { "type": "integer" }
+          }
+        },
+        "total": { "type": "integer" }
+      }
+    },
+    "finding": {
+      "type": "object",
+      "required": ["id", "fingerprint", "title", "severity", "confidence", "check", "target", "description", "remediation", "evidence", "references"],
+      "properties": {
+        "id": { "type": "string", "description": "Stable rule id, e.g. CSP-UNSAFE-INLINE" },
+        "fingerprint": { "type": "string", "description": "Identity of this finding on this target; used by --baseline" },
+        "title": { "type": "string" },
+        "severity": { "$ref": "#/$defs/severity" },
+        "confidence": { "enum": ["certain", "firm", "tentative"] },
+        "check": { "type": "string" },
+        "target": { "type": "string", "format": "uri" },
+        "description": { "type": "string" },
+        "remediation": { "type": "string" },
+        "evidence": { "type": "object", "description": "The observed values that back the finding (header names/values, cookie attributes, ...)" },
+        "references": { "type": "array", "items": { "type": "string" } },
+        "cwe": { "type": ["integer", "null"] }
+      }
+    },
+    "check": {
+      "type": "object",
+      "required": ["id", "name", "status", "findings", "facts"],
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "status": { "enum": ["ok", "error", "skipped"] },
+        "error": { "type": ["string", "null"] },
+        "skipped": { "type": ["string", "null"] },
+        "findings": { "type": "array", "items": { "$ref": "#/$defs/finding" } },
+        "facts": { "type": "object", "description": "Informational data the check collected (certificate details, parsed CSP, DNS records, ...)" }
+      }
+    },
+    "target": {
+      "type": "object",
+      "required": ["target", "started", "duration_seconds", "reachable", "summary", "findings", "checks"],
+      "properties": {
+        "target": { "type": "string", "format": "uri" },
+        "started": { "type": "string", "format": "date-time" },
+        "duration_seconds": { "type": "number" },
+        "reachable": { "type": "boolean" },
+        "error": { "type": ["string", "null"] },
+        "summary": { "$ref": "#/$defs/summary" },
+        "findings": { "type": "array", "items": { "$ref": "#/$defs/finding" } },
+        "checks": { "type": "array", "items": { "$ref": "#/$defs/check" } }
+      }
+    }
+  }
+}
