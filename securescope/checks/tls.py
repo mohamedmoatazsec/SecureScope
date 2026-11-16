@@ -352,7 +352,7 @@ class TLSCheck(Check):
             redirect["tested"] = True
             try:
                 response = ctx.session.get(
-                    f"http://{ctx.hostname}/", allow_redirects=False, timeout=min(timeout, 8.0)
+                    f"http://{ctx.hostname}/", allow_redirects=False, timeout=min(timeout, 8.0), limit=0
                 )
                 location = response.headers.get("Location")
                 redirect.update(

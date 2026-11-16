@@ -56,16 +56,29 @@ runs:
     - name: Scan
       id: scan
       shell: bash
+      env:
+        TARGET: ${{ inputs.target }}
+        FAIL_ON: ${{ inputs.fail-on }}
+        BASELINE: ${{ inputs.baseline }}
+        FORMATS: ${{ inputs.formats }}
+        OUTPUT: ${{ inputs.output }}
+        EXTRA_ARGS: ${{ inputs.extra-args }}
       run: |
+        # Inputs arrive as environment variables so their contents are data, not shell code.
         set +e
+        read -r -a targets <<< "$TARGET"
+        read -r -a formats <<< "$FORMATS"
         args=()
-        for f in ${{ inputs.formats }}; do args+=(-f "$f"); done
-        [ -n "${{ inputs.fail-on }}" ] && args+=(--fail-on "${{ inputs.fail-on }}")
-        [ -n "${{ inputs.baseline }}" ] && args+=(--baseline "${{ inputs.baseline }}")
-        securescope ${{ inputs.target }} "${args[@]}" -o "${{ inputs.output }}" --no-color ${{ inputs.extra-args }}
+        for f in "${formats[@]}"; do args+=(-f "$f"); done
+        [ -n "$FAIL_ON" ] && args+=(--fail-on "$FAIL_ON")
+        [ -n "$BASELINE" ] && args+=(--baseline "$BASELINE")
+        # extra-args is the one input that is deliberately shell syntax (it needs quoting for -H values);
+        # it is written by the workflow author, who already controls the job.
+        eval "extra=($EXTRA_ARGS)"
+        securescope "${targets[@]}" "${args[@]}" -o "$OUTPUT" --no-color "${extra[@]}"
         code=$?
         echo "exit-code=$code" >> "$GITHUB_OUTPUT"
-        if [ -f "${{ inputs.output }}/securescope-report.md" ]; then
-          cat "${{ inputs.output }}/securescope-report.md" >> "$GITHUB_STEP_SUMMARY"
+        if [ -f "$OUTPUT/securescope-report.md" ]; then
+          cat "$OUTPUT/securescope-report.md" >> "$GITHUB_STEP_SUMMARY"
         fi
         exit $code

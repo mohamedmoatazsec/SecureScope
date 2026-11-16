@@ -135,11 +135,7 @@ def evaluate_cors(probe: dict[str, Any], null_probe: dict[str, Any] | None = Non
             confidence=Confidence.CERTAIN,
         )
 
-    if (
-        probe.get("origin")
-        and not probe.get("wildcard")
-        and "origin" not in (probe.get("vary") or "").lower()
-    ):
+    if probe.get("reflected") and "origin" not in (probe.get("vary") or "").lower():
         add(
             "CORS-NO-VARY-ORIGIN",
             "Per-origin CORS response without Vary: Origin",
@@ -162,11 +158,11 @@ class CORSCheck(Check):
     def run(self, ctx: ScanContext) -> CheckResult:
         result = self.result()
         try:
-            response = ctx.session.get(ctx.target, headers={"Origin": PROBE_ORIGIN})
+            response = ctx.session.get(ctx.target, headers={"Origin": PROBE_ORIGIN}, limit=0)
             probe = analyze_cors(response.headers, PROBE_ORIGIN)
             null_probe = None
             if probe.get("origin") is not None:
-                null_response = ctx.session.get(ctx.target, headers={"Origin": "null"})
+                null_response = ctx.session.get(ctx.target, headers={"Origin": "null"}, limit=0)
                 null_probe = analyze_cors(null_response.headers, "null")
         except requests.RequestException as exc:
             result.error = str(exc)
