@@ -1,63 +1,43 @@
-from urllib.parse import urlparse
-import whois
+"""WHOIS lookup for the target's registrable domain."""
+
 from datetime import datetime
+
+from securescope.config import hostname_from_url
+
+
+def _first(value):
+    if isinstance(value, list):
+        return value[0] if value else None
+    return value
+
+
+def _date(value):
+    value = _first(value)
+    if isinstance(value, datetime):
+        return value.strftime("%Y-%m-%d")
+    return str(value) if value is not None else None
 
 
 def scan_whois(url):
-
-    hostname = urlparse(url).hostname
-
-    if hostname is None:
-        hostname = url
-
-    result = {}
+    """Return registrar, key dates and name servers for the target domain."""
+    hostname = hostname_from_url(url)
+    result = {"domain": hostname}
 
     try:
+        import whois  # python-whois; imported lazily so the rest works without it
+    except ImportError:
+        result["error"] = "python-whois is not installed (pip install 'securescope[whois]')"
+        return result
 
-        w = whois.whois(hostname)
+    try:
+        record = whois.whois(hostname)
+    except Exception as exc:  # the library raises many unrelated exception types
+        result["error"] = str(exc)
+        return result
 
-        result["domain"] = hostname
-        result["registrar"] = str(w.registrar)
-
-        creation = w.creation_date
-        expiration = w.expiration_date
-        updated = w.updated_date
-
-        if isinstance(creation, list):
-            creation = creation[0]
-
-        if isinstance(expiration, list):
-            expiration = expiration[0]
-
-        if isinstance(updated, list):
-            updated = updated[0]
-
-        result["creation_date"] = (
-            creation.strftime("%Y-%m-%d")
-            if isinstance(creation, datetime)
-            else str(creation)
-        )
-
-        result["expiration_date"] = (
-            expiration.strftime("%Y-%m-%d")
-            if isinstance(expiration, datetime)
-            else str(expiration)
-        )
-
-        result["updated_date"] = (
-            updated.strftime("%Y-%m-%d")
-            if isinstance(updated, datetime)
-            else str(updated)
-        )
-
-        result["name_servers"] = (
-            sorted(list(w.name_servers))
-            if w.name_servers
-            else []
-        )
-
-    except Exception as e:
-
-        result["error"] = str(e)
-
+    result["registrar"] = str(record.registrar) if record.registrar else None
+    result["creation_date"] = _date(record.creation_date)
+    result["expiration_date"] = _date(record.expiration_date)
+    result["updated_date"] = _date(record.updated_date)
+    result["name_servers"] = sorted(str(ns).lower() for ns in (record.name_servers or []))
     return result

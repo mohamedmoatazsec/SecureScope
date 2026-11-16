@@ -1,6 +1,4 @@
-import requests
-from urllib.parse import urljoin
-
+"""security.txt (RFC 9116) locations and parsing."""
 
 SECURITY_TXT_PATHS = [
     "/.well-known/security.txt",
@@ -8,68 +6,13 @@ SECURITY_TXT_PATHS = [
 ]
 
 
-def scan_securitytxt(url):
-
-    result = {
-        "found": False,
-        "location": None,
-        "status": None,
-        "fields": {},
-    }
-
-    headers = {
-        "User-Agent": "SecureScope/1.0"
-    }
-
-    try:
-
-        for path in SECURITY_TXT_PATHS:
-
-            target = urljoin(url, path)
-
-            response = requests.get(
-                target,
-                timeout=10,
-                headers=headers,
-            )
-
-            if response.status_code != 200:
-                continue
-
-            result["found"] = True
-            result["location"] = target
-            result["status"] = response.status_code
-
-            for line in response.text.splitlines():
-
-                line = line.strip()
-
-                if not line:
-                    continue
-
-                if line.startswith("#"):
-                    continue
-
-                if ":" not in line:
-                    continue
-
-                key, value = line.split(":", 1)
-
-                key = key.strip()
-
-                value = value.strip()
-
-                if key not in result["fields"]:
-                    result["fields"][key] = []
-
-                result["fields"][key].append(value)
-
-            return result
-
-        return result
-
-    except Exception as e:
-
-        result["error"] = str(e)
-
-        return result
+def parse_security_txt(text):
+    """Parse security.txt fields into {field: [values]}. Pure function."""
+    fields = {}
+    for raw in text.splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#") or ":" not in line:
+            continue
+        key, value = line.split(":", 1)
+        fields.setdefault(key.strip(), []).append(value.strip())
+    return fields
